@@ -1,0 +1,105 @@
+---
+# ConfigMap — xmrig config.json
+# Update YOUR_WALLET_ADDRESS and YOUR_WORKER_NAME before applying
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xmrig-config
+  namespace: mining
+data:
+  config.json: |
+    {
+        "autosave": false,
+        "donate-level": 1,
+        "cpu": {
+            "enabled": true,
+            "huge-pages": false,
+            "threads": 1
+        },
+        "pools": [
+            {
+                "url": "pool.supportxmr.com:443",
+                "user": "YOUR_WALLET_ADDRESS",
+                "pass": "YOUR_WORKER_NAME",
+                "tls": true,
+                "keepalive": true
+            }
+        ],
+        "http": {
+            "enabled": true,
+            "host": "0.0.0.0",
+            "port": 3000,
+            "access-token": null,
+            "restricted": false
+        },
+        "log-file": null,
+        "print-time": 60,
+        "syslog": false
+    }
+
+---
+# Deployment — 4 xmrig pods pinned to RP5
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xmrig
+  namespace: mining
+  labels:
+    app: xmrig
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xmrig
+  template:
+    metadata:
+      labels:
+        app: xmrig
+    spec:
+      # Pin to RP5 — faster CPU, 16GB RAM
+      nodeSelector:
+        kubernetes.io/hostname: rp5-master
+
+      containers:
+        - name: xmrig
+          image: ivuorinen/docker-xmrig:latest
+          imagePullPolicy: Always
+          command:
+            - /bin/xmrig
+            - --config=/xmrig/etc/config.json
+          ports:
+            - containerPort: 3000
+              name: api
+          volumeMounts:
+            - name: config
+              mountPath: /xmrig/etc/config.json
+              subPath: config.json
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+
+      volumes:
+        - name: config
+          configMap:
+            name: xmrig-config
+
+---
+# Service — exposes xmrig API port 3000 for stats-api queries
+apiVersion: v1
+kind: Service
+metadata:
+  name: xmrig-api
+  namespace: mining
+spec:
+  type: ClusterIP
+  selector:
+    app: xmrig
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+      name: api

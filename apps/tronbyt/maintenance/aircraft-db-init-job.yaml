@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aircraft-db-init
+  namespace: tronbyt
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app: aircraft-db-init
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/hostname: raspberrypi
+      containers:
+        - name: build-aircraft-db
+          image: ghcr.io/donahuebrendan/homelab-stats-api:v1
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/app/build_aircraft_db.py"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+          volumeMounts:
+            - name: persistent-data
+              mountPath: /persistent
+      volumes:
+        - name: persistent-data
+          persistentVolumeClaim:
+            claimName: tronbyt-data

@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stats-api
+  namespace: tronbyt
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: stats-api
+  template:
+    metadata:
+      labels:
+        app: stats-api
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: raspberrypi
+      containers:
+        - name: stats-api
+          image: ghcr.io/donahuebrendan/homelab-stats-api:v1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PIHOLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stats-api-secrets
+                  key: pihole-password
+            - name: OPENSKY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: stats-api-secrets
+                  key: opensky-client-id
+            - name: OPENSKY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: stats-api-secrets
+                  key: opensky-client-secret
+          ports:
+            - containerPort: 5000
+              hostPort: 5000
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "384Mi"
+              cpu: "300m"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: dev
+              mountPath: /dev
+            - name: persistent-data
+              mountPath: /persistent
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: persistent-data
+          persistentVolumeClaim:
+            claimName: tronbyt-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stats-api
+  namespace: tronbyt
+spec:
+  type: ClusterIP
+  selector:
+    app: stats-api
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000

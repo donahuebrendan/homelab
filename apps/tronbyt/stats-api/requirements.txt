@@ -1,0 +1,4 @@
+flask==3.0.3
+psutil==5.9.8
+adafruit-circuitpython-dht==4.0.4
+RPi.GPIO==0.7.1

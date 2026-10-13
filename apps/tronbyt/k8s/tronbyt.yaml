@@ -1,0 +1,77 @@
+---
+# PersistentVolumeClaim — stores Tronbyt's SQLite DB and app data
+# Pinned to RP3 via local-path so data stays on the right node
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tronbyt-data
+  namespace: tronbyt
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+# Deployment — Tronbyt server pinned to RP3 worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tronbyt-server
+  namespace: tronbyt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tronbyt-server
+  template:
+    metadata:
+      labels:
+        app: tronbyt-server
+    spec:
+      # Pin to RP3 so NodePort is reachable at 192.168.4.29
+      nodeSelector:
+        kubernetes.io/hostname: raspberrypi
+
+      containers:
+        - name: tronbyt-server
+          image: ghcr.io/tronbyt/server:2
+          ports:
+            - containerPort: 8000
+              hostPort: 8000      # binds directly to 192.168.4.29:8000
+          env:
+            - name: PORT
+              value: "8000"
+          volumeMounts:
+            - name: tronbyt-data
+              mountPath: /app/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+      volumes:
+        - name: tronbyt-data
+          persistentVolumeClaim:
+            claimName: tronbyt-data
+
+---
+# Service — ClusterIP for internal cluster communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: tronbyt-server
+  namespace: tronbyt
+spec:
+  type: ClusterIP
+  selector:
+    app: tronbyt-server
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000

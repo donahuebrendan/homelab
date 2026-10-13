@@ -1,0 +1,160 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pihole
+
+---
+# PersistentVolumeClaim — stores Pi-hole config and query logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pihole-data
+  namespace: pihole
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Deployment — Pi-hole pinned to RP5
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole
+  namespace: pihole
+  labels:
+    app: pihole
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pihole
+  template:
+    metadata:
+      labels:
+        app: pihole
+    spec:
+      # Pin to RP5
+      nodeSelector:
+        kubernetes.io/hostname: rp5-master
+
+      hostNetwork: false
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 1.1.1.1
+          - 8.8.8.8
+
+      containers:
+        - name: pihole
+          image: pihole/pihole:latest
+          imagePullPolicy: Always
+
+          env:
+            - name: TZ
+              value: "America/Los_Angeles"
+
+            - name: WEBPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pihole-secret
+                  key: password
+
+            - name: PIHOLE_DNS_
+              value: "1.1.1.1;8.8.8.8"
+
+            - name: DNSSEC
+              value: "false"
+
+            # Pi-hole v6: allow DNS queries from networks
+            # outside the container's local subnet.
+            - name: FTLCONF_dns_listeningMode
+              value: "all"
+
+            - name: WEB_PORT
+              value: "80"
+
+          ports:
+            # DNS ports — hostPort binds to 192.168.4.35
+            - containerPort: 53
+              hostPort: 53
+              protocol: TCP
+              name: dns-tcp
+
+            - containerPort: 53
+              hostPort: 53
+              protocol: UDP
+              name: dns-udp
+
+            # Web UI
+            - containerPort: 80
+              hostPort: 8080
+              name: web
+
+          volumeMounts:
+            - name: pihole-data
+              mountPath: /etc/pihole
+              subPath: pihole
+
+            - name: pihole-data
+              mountPath: /etc/dnsmasq.d
+              subPath: dnsmasq.d
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          livenessProbe:
+            httpGet:
+              path: /admin
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+          readinessProbe:
+            httpGet:
+              path: /admin
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+      volumes:
+        - name: pihole-data
+          persistentVolumeClaim:
+            claimName: pihole-data
+
+---
+# Service — internal cluster access
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole
+  namespace: pihole
+spec:
+  type: ClusterIP
+  selector:
+    app: pihole
+  ports:
+    - name: dns-tcp
+      protocol: TCP
+      port: 53
+      targetPort: 53
+
+    - name: dns-udp
+      protocol: UDP
+      port: 53
+      targetPort: 53
+
+    - name: web
+      protocol: TCP
+      port: 8080
+      targetPort: 80
