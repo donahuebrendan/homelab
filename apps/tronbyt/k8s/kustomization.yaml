@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - tronbyt.yaml
   - stats-api.yaml
+  - stats-api.yaml
