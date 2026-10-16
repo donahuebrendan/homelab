@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - ../../apps/tronbyt/k8s
   - ../../apps/pihole/k8s
+  - argocd-server-lan.yaml
