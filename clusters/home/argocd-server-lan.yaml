@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: argocd-server-lan
   namespace: argocd
+  labels:
+    svccontroller.k3s.cattle.io/lbpool: argocd
 spec:
   type: LoadBalancer
   selector:
