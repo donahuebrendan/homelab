@@ -15,11 +15,12 @@ spec:
       labels:
         app: stats-api
     spec:
+      serviceAccountName: stats-api-reader
       nodeSelector:
         kubernetes.io/hostname: raspberrypi
       containers:
         - name: stats-api
-          image: ghcr.io/donahuebrendan/homelab-stats-api:v1
+          image: ghcr.io/donahuebrendan/homelab-stats-api:v2
           imagePullPolicy: IfNotPresent
           env:
             - name: PIHOLE_PASSWORD

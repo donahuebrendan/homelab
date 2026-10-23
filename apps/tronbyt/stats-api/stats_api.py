@@ -14,6 +14,8 @@ import urllib.request
 import json
 import unicodedata
 import os
+import ssl
+import urllib.error
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -620,6 +622,107 @@ def _flight_poller():
 # Start flight poller thread
 _flight_thread = threading.Thread(target=_flight_poller, daemon=True)
 _flight_thread.start()
+
+# ── Kubernetes / Argo CD status cache ──────────────────────────────
+_K8S_NAMESPACES = ("argocd", "kube-system", "pihole", "tronbyt")
+_argocd_cache = {"expires": 0, "data": None}
+_argocd_cache_lock = threading.Lock()
+
+
+def _k8s_get_json(api_path):
+    """Read a Kubernetes API endpoint using the pod's read-only service account."""
+    base = "/var/run/secrets/kubernetes.io/serviceaccount"
+    with open(os.path.join(base, "token")) as f:
+        token = f.read().strip()
+
+    context = ssl.create_default_context(
+        cafile=os.path.join(base, "ca.crt")
+    )
+    request = urllib.request.Request(
+        "https://kubernetes.default.svc" + api_path,
+        headers={"Authorization": "Bearer " + token},
+    )
+    with urllib.request.urlopen(request, timeout=4, context=context) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _fetch_argocd_status():
+    deployments = []
+
+    # Query only namespaces explicitly allowed by the service account's RBAC.
+    for namespace in _K8S_NAMESPACES:
+        result = _k8s_get_json(
+            "/apis/apps/v1/namespaces/" + namespace + "/deployments"
+        )
+        for item in result.get("items", []):
+            spec = item.get("spec", {})
+            status = item.get("status", {})
+            desired = spec.get("replicas", 1)
+            ready = status.get("readyReplicas", 0)
+
+            # Hide intentionally scaled-to-zero workloads.
+            if desired == 0:
+                continue
+
+            deployments.append({
+                "namespace": namespace,
+                "name": item.get("metadata", {}).get("name", "unknown"),
+                "ready": ready,
+                "desired": desired,
+                "status": "healthy" if ready == desired else (
+                    "progressing" if ready > 0 else "unavailable"
+                ),
+            })
+
+    app_result = _k8s_get_json(
+        "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications"
+    )
+    application = next(
+        (
+            item for item in app_result.get("items", [])
+            if item.get("metadata", {}).get("name") == "homelab"
+        ),
+        None,
+    )
+    if application is None:
+        raise RuntimeError("Argo CD application 'homelab' was not found")
+
+    app_status = application.get("status", {})
+    sync = app_status.get("sync", {}).get("status", "Unknown")
+    health = app_status.get("health", {}).get("status", "Unknown")
+
+    deployments.sort(key=lambda d: (d["namespace"], d["name"]))
+    return {
+        "application": "homelab",
+        "sync": sync,
+        "health": health,
+        "deployments": deployments,
+        "last_updated": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+
+
+@app.route("/argocd")
+def argocd_status():
+    """Return cached Argo CD and deployment readiness for the Tidbyt display."""
+    now = time.time()
+    with _argocd_cache_lock:
+        if _argocd_cache["data"] is not None and now < _argocd_cache["expires"]:
+            return jsonify(_argocd_cache["data"])
+
+    try:
+        data = _fetch_argocd_status()
+    except Exception as e:
+        print(f"Argo CD status fetch error: {e}")
+        return jsonify({
+            "error": "Could not fetch Kubernetes deployment status"
+        }), 503
+
+    with _argocd_cache_lock:
+        _argocd_cache["data"] = data
+        _argocd_cache["expires"] = time.time() + 60
+
+    return jsonify(data)
+
 
 # ── Routes ─────────────────────────────────────────────────────────
 @app.route("/stats")

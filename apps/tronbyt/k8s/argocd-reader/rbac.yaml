@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stats-api-reader
+  namespace: tronbyt
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: stats-api-deployment-reader
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stats-api-deployment-reader
+  namespace: tronbyt
+subjects:
+  - kind: ServiceAccount
+    name: stats-api-reader
+    namespace: tronbyt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: stats-api-deployment-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stats-api-deployment-reader
+  namespace: pihole
+subjects:
+  - kind: ServiceAccount
+    name: stats-api-reader
+    namespace: tronbyt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: stats-api-deployment-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stats-api-deployment-reader
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: stats-api-reader
+    namespace: tronbyt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: stats-api-deployment-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stats-api-deployment-reader
+  namespace: kube-system
+subjects:
+  - kind: ServiceAccount
+    name: stats-api-reader
+    namespace: tronbyt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: stats-api-deployment-reader
