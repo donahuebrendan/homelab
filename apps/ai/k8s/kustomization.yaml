@@ -5,3 +5,5 @@ resources:
   - namespace.yaml
   - storage.yaml
   - ollama.yaml
+  - open-webui.yaml
+
