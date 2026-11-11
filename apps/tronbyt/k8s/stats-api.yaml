@@ -20,7 +20,7 @@ spec:
         kubernetes.io/hostname: raspberrypi
       containers:
         - name: stats-api
-          image: ghcr.io/donahuebrendan/homelab-stats-api:v2
+          image: ghcr.io/donahuebrendan/homelab-stats-api:v3
           imagePullPolicy: IfNotPresent
           env:
             - name: PIHOLE_PASSWORD

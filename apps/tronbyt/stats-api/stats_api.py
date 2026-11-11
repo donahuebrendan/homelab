@@ -49,6 +49,16 @@ _stats_cache = {
     "dht_humidity": None,
 }
 _stats_lock = threading.Lock()
+# ── RP5 stats cache ────────────────────────────────────────────────
+RP5_STATS_URL = "http://192.168.4.35:5001/metrics"
+RP5_POLL_INTERVAL = 10
+
+_rp5_cache = {
+    "hostname": "rp5-master",
+    "online": False,
+    "last_updated": None,
+}
+_rp5_lock = threading.Lock()
 
 # ── Background thread helpers ──────────────────────────────────────
 _last_net_bytes = None
@@ -173,6 +183,35 @@ def _update_stats():
 # Start background thread
 _thread = threading.Thread(target=_update_stats, daemon=True)
 _thread.start()
+
+def _poll_rp5_stats():
+    """Poll RP5 metrics every 10 seconds and maintain a cached response."""
+    while True:
+        try:
+            with urllib.request.urlopen(
+                RP5_STATS_URL, timeout=3
+            ) as response:
+                data = json.loads(response.read().decode("utf-8"))
+
+            if not isinstance(data, dict) or "cpu_pct" not in data:
+                raise ValueError("Invalid RP5 metrics response")
+
+            data["online"] = True
+
+            with _rp5_lock:
+                _rp5_cache.clear()
+                _rp5_cache.update(data)
+
+        except Exception as e:
+            print(f"RP5 stats polling error: {e}")
+            with _rp5_lock:
+                _rp5_cache["online"] = False
+
+        time.sleep(RP5_POLL_INTERVAL)
+
+
+_rp5_thread = threading.Thread(target=_poll_rp5_stats, daemon=True)
+_rp5_thread.start()
 
 # ── Flask app ──────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -728,7 +767,37 @@ def argocd_status():
 @app.route("/stats")
 def stats():
     with _stats_lock:
-        return jsonify(dict(_stats_cache))
+        result = dict(_stats_cache)
+
+    with _rp5_lock:
+        rp5 = dict(_rp5_cache)
+
+    rp3 = {
+        key: result[key]
+        for key in (
+            "cpu_pct",
+            "ram_pct",
+            "ram_used_mb",
+            "ram_total_mb",
+            "temp_c",
+            "temp_pct",
+            "disk_pct",
+            "disk_used_gb",
+            "disk_total_gb",
+            "hostname",
+            "uptime",
+            "ip",
+        )
+    }
+
+    rp3["online"] = True
+
+    result["devices"] = {
+        "rp3": rp3,
+        "rp5": rp5,
+    }
+
+    return jsonify(result)
 
 @app.route("/tides")
 def tides():
