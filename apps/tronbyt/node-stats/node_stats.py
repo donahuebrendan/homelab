@@ -4,6 +4,8 @@ import time
 from datetime import datetime, timezone
 
 import psutil
+
+psutil.PROCFS_PATH = os.environ.get("PSUTIL_PROCFS_PATH", "/proc")
 from flask import Flask, jsonify
 
 app = Flask(__name__)

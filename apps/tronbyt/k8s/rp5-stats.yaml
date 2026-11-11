@@ -19,7 +19,7 @@ spec:
         kubernetes.io/hostname: rp5-master
       containers:
         - name: rp5-stats
-          image: ghcr.io/donahuebrendan/homelab-rp5-stats:v1
+          image: ghcr.io/donahuebrendan/homelab-rp5-stats:v2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
