@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rp5-stats
+  namespace: tronbyt
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rp5-stats
+  template:
+    metadata:
+      labels:
+        app: rp5-stats
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: rp5-master
+      containers:
+        - name: rp5-stats
+          image: ghcr.io/donahuebrendan/homelab-rp5-stats:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5001
+              hostPort: 5001
+              protocol: TCP
+          env:
+            - name: PSUTIL_PROCFS_PATH
+              value: /host-proc
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: host-proc
+              mountPath: /host-proc
+              readOnly: true
+            - name: host-sys
+              mountPath: /host-sys
+              readOnly: true
+            - name: host-root
+              mountPath: /host-root
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: host-sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rp5-stats
+  namespace: tronbyt
+spec:
+  type: ClusterIP
+  selector:
+    app: rp5-stats
+  ports:
+    - name: http
+      port: 5001
+      targetPort: 5001
+      protocol: TCP

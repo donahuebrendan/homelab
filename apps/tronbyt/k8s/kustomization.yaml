@@ -5,4 +5,5 @@ resources:
   - namespace.yaml
   - tronbyt.yaml
   - stats-api.yaml
+  - rp5-stats.yaml
   - argocd-reader/rbac.yaml
